@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import math
+import itertools
 import Bio.Seq
+from collections import deque
 
 """
 
@@ -72,6 +74,21 @@ def up2bit(dna_sequence):
         result = (result << 2) + twobit
     return result
 
+def up2bit_decode(up2bit_value):
+    result = deque()
+    total_bits = up2bit_value.bit_length()
+    if total_bits%2 != 1:
+      raise Exception("expect odd number of bits in up2bit encoding")
+    mask = 0x03
+    remaining_bits = up2bit_value
+    while remaining_bits!=0:
+      twobit = remaining_bits&mask
+      char = ('A','C','T','G')[twobit]
+      remaining_bits = remaining_bits>>2
+      print(twobit, char)
+    return result
+
+
 """
 Determines if `number` starts with a '1' digit in the chosen `base`. A `True`
 return value might indicate, for example, that the integers from 0 to `number-1`
@@ -114,7 +131,7 @@ Read a word list file in either Diceware format (`11111\tword`, indexes given
 by first column as base-6 dice rolls) or flat list (each row is a different 
 word, index is row index). The list is contain a word for a full range of
 either base-2 or base-6 numbers, e.g. 0-2047, 0-7775 (as `11111` to `66666`), 
-0-6665 (as `1111` to `6666`).
+0-6665 (as `1111` to `6666`). All words are converted to lowercase.
 
 Args:
     filename: Filename or path of word list.
@@ -141,7 +158,7 @@ def read_wordlist(filename):
         wordlist.append(None)
       if wordlist[word_index] is not None:
         raise Exception(f"read multiple identical words for index {word_index}")
-      wordlist[word_index] = word
+      wordlist[word_index] = word.lower()
   # check all positions filed (i.e. no missing word for any index)
   for index,word in enumerate(wordlist):
     if word is None:
@@ -179,6 +196,8 @@ eff_short_wordlist2 = read_wordlist("../wordlist/eff_short_wordlist_2_0.txt")
 
 
 test_sequence = up2bit("TAGCCACACAGACTATTGTG")
+test_sequence = up2bit("AAGCCACACAGACTATTGTG")
+test_sequence = up2bit("AAGCCACACAGACTATTGTA")
 test2 = up2bit("ACTG")
 up2bit_value = test2
 up2bit_value = test_sequence
@@ -187,9 +206,11 @@ print(convert_base_x(test2, 6))
 print(convert_base_x(7776, 6))
 print(test_sequence)
 
+# encode
 wordlist = bip39_english
-wordlist = eff_large_wordlist
+#wordlist = eff_large_wordlist
 wordlist = eff_short_wordlist1
+mnemonic = deque()
 is_hexal = is_full_base_x(len(wordlist),6) # True if wordlist uses base6 indexes
 if is_hexal:
   hexal_blocksize = math.floor(math.log(len(wordlist), 6)) 
@@ -205,7 +226,81 @@ if is_hexal:
     print(hexal_block)
     print("".join(str(digit+1) for digit in hexal_block))
     index = sum(digit*(6**pos) for pos, digit in enumerate(reversed(hexal_block)))
-    print (index, wordlist[index])
+    word = wordlist[index]
+    print (index, word)
+    mnemonic.appendleft(word.title())
+
 else:
   # binary
-  pass
+  binary_blocksize = math.floor(math.log(len(wordlist), 2)) 
+  #total_bits = math.ceil(math.log(up2bit_value, 2)) 
+  #chunks = math.ceil(total_bits/binary_blocksize)
+  mask = sum(1<<pos for pos in range(0, binary_blocksize))
+  print("{0:50b}".format(up2bit_value))
+  remaining_bits = up2bit_value
+  while remaining_bits!=0:
+    this_block = remaining_bits&mask
+    print("{0:011b}".format(this_block))
+    remaining_bits=remaining_bits>>binary_blocksize
+    print(this_block, wordlist[this_block])
+    word = wordlist[this_block]
+    mnemonic.appendleft(word.title())
+  print(binary_blocksize)
+  #print(total_bits)
+  mask = sum(1<<pos for pos in range(0, binary_blocksize))
+  mask2 = mask<<binary_blocksize
+  mask3 = mask2<<binary_blocksize
+  mask4 = mask3<<binary_blocksize
+  print("{0:50b}".format(up2bit_value&mask))
+  print("{0:50b}".format(up2bit_value&mask2))
+  print("{0:50b}".format(up2bit_value&mask3))
+  print("{0:50b}".format(up2bit_value&mask4))
+# words should be read out with last as rightmost?
+# .title()
+print(mnemonic)
+
+up2bit_value = 0
+
+# decode
+#mnemonic = ["Bus", "Duty", "Session", "Comic"]
+inverse_wordlist = {word : value for value, word in enumerate(wordlist)}
+values = [inverse_wordlist[word.lower()] for word in reversed(mnemonic)]
+print(values)
+is_hexal = is_full_base_x(len(wordlist),6) # True if wordlist uses base6 indexes
+if is_hexal:
+  hexal_blocksize = math.floor(math.log(len(wordlist), 6)) 
+  hexal_digit_blocks = [convert_base_x(value, 6) for value in values]
+    # convert each word into a series of hexal digits
+  hexal_digit_blocks = ([0]*(hexal_blocksize-len(hexal_digit_block)) + hexal_digit_block for
+    hexal_digit_block in hexal_digit_blocks)
+    # pad with zeroes to the left as needed, e.g. [2, 2] to [0, 0, 2, 2] if digits needed
+  hexal_digits = list(itertools.chain(*hexal_digit_blocks))  
+    # flatten into a list of hexal digits
+  #up2bit_value = 0 sum(value*(hexal_blocksize**chunk) for chunk, value in enumerate(values))
+  #print(hexal_digit_blocks)
+  #print(flat_list)
+  #print(up2bit_value)
+  up2bit_value = sum(hexal_digit*(6**pos) for pos, hexal_digit in enumerate(reversed(hexal_digits)))
+  test = list(hexal_digit*(6**pos) for pos, hexal_digit in enumerate(reversed(hexal_digits)))
+  print(test)
+  print(hexal_digits)
+  print(up2bit_value)
+else:
+  binary_blocksize = math.floor(math.log(len(wordlist), 2)) 
+  up2bit_value = sum(value<<binary_blocksize*chunk for chunk, value in enumerate(values))
+  print(up2bit_value)
+  print("{0:50b}".format(up2bit_value))
+  #total_bits = math.ceil(math.log(up2bit_value, 2)) 
+  #chunks = math.ceil(total_bits/binary_blocksize)
+  #mask = sum(1<<pos for pos in range(0, binary_blocksize))
+  
+   # binary
+bits = 0
+count_bits = up2bit_value
+while count_bits!=0:
+  count_bits=count_bits>>1
+  bits+=1
+total_bits = len(bin(up2bit_value))
+print(bin(up2bit_value))
+print(bits,total_bits, up2bit_value.bit_length())
+up2bit_decode(up2bit_value)
