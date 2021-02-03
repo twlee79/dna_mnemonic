@@ -3,6 +3,7 @@
 import math
 import itertools
 import Bio.Seq
+from importlib import resources
 
 """
 
@@ -128,31 +129,30 @@ either base-2 or base-6 numbers, e.g. 0-2047, 0-7775 (as `11111` to `66666`),
 0-6665 (as `1111` to `6666`). All words are converted to lowercase.
 
 Args:
-    filename: Filename or path of word list.
+    file_handle: Handle of an open text file containing wordlist.
 
 Returns:
     List of words, with lookup by index to give word for that index.
 
 """
-def read_wordlist(filename):
+def read_wordlist(file_handle):
   wordlist = []
-  with open(filename) as infile:
-    for index, line in enumerate(infile):
-      line = line.strip()
-      if "\t" in line:
-        # expect Diceware-style two-column list with digits, word
-        digits, word = line.split("\t")
-        value = decode_dice(digits)
-        word_index = value
-      else:
-        # otherwise expect simple flat list where row number is index
-        word = line
-        word_index = index
-      while len(wordlist)<=word_index:
-        wordlist.append(None)
-      if wordlist[word_index] is not None:
-        raise Exception(f"read multiple identical words for index {word_index}")
-      wordlist[word_index] = word.lower()
+  for index, line in enumerate(file_handle):
+    line = line.strip()
+    if "\t" in line:
+      # expect Diceware-style two-column list with digits, word
+      digits, word = line.split("\t")
+      value = decode_dice(digits)
+      word_index = value
+    else:
+      # otherwise expect simple flat list where row number is index
+      word = line
+      word_index = index
+    while len(wordlist)<=word_index:
+      wordlist.append(None)
+    if wordlist[word_index] is not None:
+      raise Exception(f"read multiple identical words for index {word_index}")
+    wordlist[word_index] = word.lower()
   # check all positions filed (i.e. no missing word for any index)
   for index,word in enumerate(wordlist):
     if word is None:
@@ -341,6 +341,25 @@ def decode_mnemonic(mnemonic, wordlist = None, inverse_wordlist = None, verbose 
   if verbose: print(f"DNA sequence {dna_sequence}")
   return dna_sequence
 
+def get_bip39_english_wordlist():
+  with resources.open_text("dna_mnemonic.wordlist","bip39_english.txt") as handle:
+    return read_wordlist(handle)
+  return None
+  
+def get_eff_large_wordlist():
+  with resources.open_text("dna_mnemonic.wordlist","eff_large_wordlist.txt") as handle:
+    return read_wordlist(handle)
+  return None
+
+def get_eff_short_wordlist1():
+  with resources.open_text("dna_mnemonic.wordlist","eff_short_wordlist_1.txt") as handle:
+    return read_wordlist(handle)
+  return None
+
+def get_eff_short_wordlist2():
+  with resources.open_text("dna_mnemonic.wordlist","eff_short_wordlist_2_0.txt") as handle:
+    return read_wordlist(handle)
+  return None
 
 if __name__ == "__main__":
   test_sequences = ["TAGCCACACAGACTATTGTG",
@@ -350,14 +369,13 @@ if __name__ == "__main__":
   #eff_large_wordlist = read_wordlist("wordlist/eff_large_wordlist.txt")
   #eff_short_wordlist1 = read_wordlist("wordlist/eff_short_wordlist_1.txt")
   #eff_short_wordlist2 = read_wordlist("wordlist/eff_short_wordlist_2_0.txt")
-
   wordlists = ["bip39_english.txt", "eff_large_wordlist.txt",
               "eff_short_wordlist_1.txt", "eff_short_wordlist_2_0.txt"]
   verbose = False
   for wordlist_name in wordlists:
-    wordlist = read_wordlist("wordlist/"+wordlist_name)
+    wordlist = read_wordlist(open("wordlist/"+wordlist_name))
     print(wordlist_name)
-    inverse_wordlist = generate_inverse_wordlist(wordlist)
+    inverse_wordlist = generate_inverse_wordlist(open(wordlist))
     for dna_sequence in test_sequences:
       mnemonic = encode_sequence(dna_sequence, wordlist, verbose=verbose)
       decoded = decode_mnemonic(mnemonic, inverse_wordlist = inverse_wordlist, verbose=verbose)
