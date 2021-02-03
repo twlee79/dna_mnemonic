@@ -164,6 +164,9 @@ def read_wordlist(filename):
       raise Exception(f"total words {total_words} is not an full range in base-2 or base-6")
   return wordlist
 
+def generate_inverse_wordlist(wordlist):
+    return {word : value for value, word in enumerate(wordlist)}
+
 """
 Determines if `number` starts with a '1' digit in the chosen `base`. A `True`
 return value might indicate, for example, that the integers from 0 to `number-1`
@@ -285,12 +288,18 @@ def encode_sequence(dna_sequence, wordlist, verbose = False):
   
   return mnemonic
 
-def decode_mnemonic(mnemonic, wordlist, verbose = False):
+def decode_mnemonic(mnemonic, wordlist = None, inverse_wordlist = None, verbose = False):
   # Decode a mnemonic DNA sequence encoded with up2bit encoding+wordlist 
   # back to sequence
 
-  inverse_wordlist = {word : value for value, word in enumerate(wordlist)}
-  # Convert wordlist to dict for reverse lookup
+  if inverse_wordlist is None:
+    wordlist_length = len(wordlist)
+    if wordlist is None:
+      raise Exception("Either wordlist or inverse wordlist must be provided")
+    inverse_wordlist = generate_inverse_wordlist(wordlist)
+    # Convert wordlist to dict for reverse lookup
+  else:
+    wordlist_length = len(inverse_wordlist)
 
   mnemonic = list(word.lower() for word in mnemonic)
 
@@ -305,10 +314,10 @@ def decode_mnemonic(mnemonic, wordlist, verbose = False):
   if verbose: 
     print(f"mnemonic to decode: {mnemonic}")
     print(f"decoded values: {values}")
-  is_hexal = is_full_base_x(len(wordlist),6) # True if wordlist uses base6 indexes
+  is_hexal = is_full_base_x(wordlist_length,6) # True if wordlist uses base6 indexes
 
   if is_hexal:
-    hexal_blocksize = math.floor(math.log(len(wordlist), 6)) 
+    hexal_blocksize = math.floor(math.log(wordlist_length, 6)) 
     hexal_digit_blocks = [convert_base_x(value, 6) for value in values]
       # convert each word into a series of hexal digits
     
@@ -325,7 +334,7 @@ def decode_mnemonic(mnemonic, wordlist, verbose = False):
       print(f"hexal digits: {str_digits(hexal_digits)}")
 
   else:
-    binary_blocksize = math.floor(math.log(len(wordlist), 2)) 
+    binary_blocksize = math.floor(math.log(wordlist_length, 2)) 
     up2bit_value = sum(value<<binary_blocksize*chunk for chunk, value in enumerate(values))
   if verbose: print(f"decoded up2bit value: {up2bit_value}, 0b{up2bit_value:b}")
   dna_sequence = up2bit_decode(up2bit_value)
@@ -337,20 +346,21 @@ if __name__ == "__main__":
   test_sequences = ["TAGCCACACAGACTATTGTG",
                     "AAGCCACACAGACTATTGTG",
                     "TAGCCACACAGACTATTGTA"]
-  #bip39_english = read_wordlist("../wordlist/bip39_english.txt")
-  #eff_large_wordlist = read_wordlist("../wordlist/eff_large_wordlist.txt")
-  #eff_short_wordlist1 = read_wordlist("../wordlist/eff_short_wordlist_1.txt")
-  #eff_short_wordlist2 = read_wordlist("../wordlist/eff_short_wordlist_2_0.txt")
+  #bip39_english = read_wordlist("wordlist/bip39_english.txt")
+  #eff_large_wordlist = read_wordlist("wordlist/eff_large_wordlist.txt")
+  #eff_short_wordlist1 = read_wordlist("wordlist/eff_short_wordlist_1.txt")
+  #eff_short_wordlist2 = read_wordlist("wordlist/eff_short_wordlist_2_0.txt")
 
   wordlists = ["bip39_english.txt", "eff_large_wordlist.txt",
               "eff_short_wordlist_1.txt", "eff_short_wordlist_2_0.txt"]
   verbose = False
   for wordlist_name in wordlists:
-    wordlist = read_wordlist("../wordlist/"+wordlist_name)
+    wordlist = read_wordlist("wordlist/"+wordlist_name)
     print(wordlist_name)
+    inverse_wordlist = generate_inverse_wordlist(wordlist)
     for dna_sequence in test_sequences:
-      mnemonic = encode_sequence(dna_sequence, wordlist, verbose)
-      decoded = decode_mnemonic(mnemonic, wordlist, verbose)
+      mnemonic = encode_sequence(dna_sequence, wordlist, verbose=verbose)
+      decoded = decode_mnemonic(mnemonic, inverse_wordlist = inverse_wordlist, verbose=verbose)
       print("".join(mnemonic))
       print(decoded)
     print()
