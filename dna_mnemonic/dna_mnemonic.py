@@ -3,7 +3,6 @@
 import math
 import itertools
 import Bio.Seq
-from collections import deque
 
 """
 
@@ -74,20 +73,35 @@ def up2bit(dna_sequence):
         result = (result << 2) + twobit
     return result
 
+"""
+Decodes a *up2bit* encoded number back to a DNA sequence.
+
+Args:
+    up2bit_value: The `up2bit`-encoded DNA sequence as an arbitrary precision int.
+
+Returns:
+    dna_sequence: DNA sequence as a string of 'A', 'C', 'T', 'G' letters.
+
+"""
+
 def up2bit_decode(up2bit_value):
-    result = deque()
+    result = []
     total_bits = up2bit_value.bit_length()
     if total_bits%2 != 1:
       raise Exception("expect odd number of bits in up2bit encoding")
     mask = 0x03
     remaining_bits = up2bit_value
+    twobit = None
     while remaining_bits!=0:
       twobit = remaining_bits&mask
       char = ('A','C','T','G')[twobit]
       remaining_bits = remaining_bits>>2
-      print(twobit, char)
-    return result
-
+      result.append(char)
+    if twobit!=1:
+      raise Exception(f"Expecting a cap of 0b01, but got {twobit}")
+      # odd number of bits check should prevent us getting here, but worth checking
+    result.pop() # pop cap
+    return "".join(result)
 
 """
 Determines if `number` starts with a '1' digit in the chosen `base`. A `True`
@@ -171,14 +185,15 @@ def read_wordlist(filename):
   return wordlist
 
 """
-Converts a number to a list of digits in given base, e.g. 
+Converts a number to a list of digits in given base, with least signficiant
+bits first e.g. 13 in base 2 to `[1, 0, 1, 1]`.
 
 Args:
     num: Number to convert.
     base: Number base to convert to.
 
 Returns:
-    Number in chosen base as list of digits (most significant first).
+    Number in chosen base as list of digits (least significant first).
 
 """
 def convert_base_x(num, base):
@@ -186,8 +201,7 @@ def convert_base_x(num, base):
     while num:
         num, digit = divmod(num, base)
         result.append(digit)
-
-    return list(reversed(result))
+    return result
 
 bip39_english = read_wordlist("../wordlist/bip39_english.txt")
 eff_large_wordlist = read_wordlist("../wordlist/eff_large_wordlist.txt")
@@ -195,68 +209,72 @@ eff_short_wordlist1 = read_wordlist("../wordlist/eff_short_wordlist_1.txt")
 eff_short_wordlist2 = read_wordlist("../wordlist/eff_short_wordlist_2_0.txt")
 
 
-test_sequence = up2bit("TAGCCACACAGACTATTGTG")
-test_sequence = up2bit("AAGCCACACAGACTATTGTG")
-test_sequence = up2bit("AAGCCACACAGACTATTGTA")
-test2 = up2bit("ACTG")
-up2bit_value = test2
-up2bit_value = test_sequence
-print(test2)
-print(convert_base_x(test2, 6))
-print(convert_base_x(7776, 6))
-print(test_sequence)
+test_sequence = "AAGCCACACAGACTATTGTG"
+#test_sequence = "AAGCCACACAGACTATTGTA"
+test_sequence = "TAGCCACACAGACTATTGTG" # orig
+up2bit_value = up2bit(test_sequence)
+print(f"{test_sequence}")
+print(f"up2bit: {up2bit_value}, 0b{up2bit_value:b}")
 
-# encode
-wordlist = bip39_english
+#wordlist = bip39_english
 #wordlist = eff_large_wordlist
 wordlist = eff_short_wordlist1
-mnemonic = deque()
+
+# encode
+
+# Note, in up2bit encoding, left-most bases (i.e. those read first) become
+# the least significant bits (i.e. numbers should be read from least to
+# more significant bits, or right-to-left).
+#
+# Corresponding conversations will take chunks of bits from least-significant
+# to most significant (i.e. chunking is right-to-left), so first chunk 
+# will be left-most bases in original DNA sequence.
+mnemonic = []
 is_hexal = is_full_base_x(len(wordlist),6) # True if wordlist uses base6 indexes
 if is_hexal:
+  # encode as base6/hexal (using Diceware style wordlist)
   hexal_blocksize = math.floor(math.log(len(wordlist), 6)) 
     # number of hexal digits used to index each word in wordlist
-  print(hexal_blocksize)
+  
   as_hexal = convert_base_x(up2bit_value, 6)
-  while len(as_hexal)%hexal_blocksize!=0: as_hexal.insert(0, 0)
-    # prepend zeroes if needed
-  print(as_hexal)
+    # note: this returns a list with least significant bits first
+    # we keep this as-is when processing, but reverse order of digits when printing
+  str_digits = lambda digits: ''.join(str(digit) for digit in list(reversed(digits)))
+    # helper for printing list of digits with least-significant first as 
+    # string with most significant to the left
+
+  padding = [0]*((hexal_blocksize - len(as_hexal)%hexal_blocksize) % hexal_blocksize)
+  as_hexal = as_hexal + padding
+    # append zeroes if needed
+
+  print(f"wordlist hexal blocksize: {hexal_blocksize}\nhexal digits: {str_digits(as_hexal)}")
+  
   hexal_blocks = (as_hexal[x:x+hexal_blocksize] for x in range(0, len(as_hexal), hexal_blocksize))
+
   for hexal_block in hexal_blocks:
-    #while len(hexal_block)<hexal_blocksize: hexal_block.insert(0, 0)
-    print(hexal_block)
-    print("".join(str(digit+1) for digit in hexal_block))
-    index = sum(digit*(6**pos) for pos, digit in enumerate(reversed(hexal_block)))
+    index = sum(digit*(6**pos) for pos, digit in enumerate(hexal_block))
     word = wordlist[index]
-    print (index, word)
-    mnemonic.appendleft(word.title())
+    mnemonic.append(word.title())
+    print(f" digits {str_digits(hexal_block)},"
+          f" dice {str_digits(list(digit+1 for digit in hexal_block))},"
+          f" index: {index}, word: {word}")
 
 else:
-  # binary
+  # encode as binary (using bip39 style wordlist)
   binary_blocksize = math.floor(math.log(len(wordlist), 2)) 
-  #total_bits = math.ceil(math.log(up2bit_value, 2)) 
-  #chunks = math.ceil(total_bits/binary_blocksize)
+
   mask = sum(1<<pos for pos in range(0, binary_blocksize))
-  print("{0:50b}".format(up2bit_value))
+  print(f"wordlist binary blocksize: {binary_blocksize}")
+
+  # cut off chunks of bits using a bit shift
   remaining_bits = up2bit_value
   while remaining_bits!=0:
     this_block = remaining_bits&mask
-    print("{0:011b}".format(this_block))
     remaining_bits=remaining_bits>>binary_blocksize
-    print(this_block, wordlist[this_block])
     word = wordlist[this_block]
-    mnemonic.appendleft(word.title())
-  print(binary_blocksize)
-  #print(total_bits)
-  mask = sum(1<<pos for pos in range(0, binary_blocksize))
-  mask2 = mask<<binary_blocksize
-  mask3 = mask2<<binary_blocksize
-  mask4 = mask3<<binary_blocksize
-  print("{0:50b}".format(up2bit_value&mask))
-  print("{0:50b}".format(up2bit_value&mask2))
-  print("{0:50b}".format(up2bit_value&mask3))
-  print("{0:50b}".format(up2bit_value&mask4))
-# words should be read out with last as rightmost?
-# .title()
+    mnemonic.append(word.title())
+    print(f" digits {this_block:0{binary_blocksize}b}, index: {this_block}, word: {word}")
+
 print(mnemonic)
 
 up2bit_value = 0
@@ -264,43 +282,34 @@ up2bit_value = 0
 # decode
 #mnemonic = ["Bus", "Duty", "Session", "Comic"]
 inverse_wordlist = {word : value for value, word in enumerate(wordlist)}
-values = [inverse_wordlist[word.lower()] for word in reversed(mnemonic)]
-print(values)
+values = [inverse_wordlist[word.lower()] for word in mnemonic]
+# This is list of decoded values, note that the first values correspond to the
+# least significant digits of the corresponding up2bit encoded int (in turn 
+# these correspond to the left-most bases in the sequence).
+
+print(f"decoded values: {values}")
 is_hexal = is_full_base_x(len(wordlist),6) # True if wordlist uses base6 indexes
+
 if is_hexal:
   hexal_blocksize = math.floor(math.log(len(wordlist), 6)) 
   hexal_digit_blocks = [convert_base_x(value, 6) for value in values]
     # convert each word into a series of hexal digits
-  hexal_digit_blocks = ([0]*(hexal_blocksize-len(hexal_digit_block)) + hexal_digit_block for
+  
+  hexal_digit_blocks = list( hexal_digit_block + [0]*(hexal_blocksize-len(hexal_digit_block)) for
     hexal_digit_block in hexal_digit_blocks)
-    # pad with zeroes to the left as needed, e.g. [2, 2] to [0, 0, 2, 2] if digits needed
+    # pad with zeroes to the right as needed, e.g. [2, 2] to [2, 2, 0, 0]
   hexal_digits = list(itertools.chain(*hexal_digit_blocks))  
     # flatten into a list of hexal digits
-  #up2bit_value = 0 sum(value*(hexal_blocksize**chunk) for chunk, value in enumerate(values))
-  #print(hexal_digit_blocks)
-  #print(flat_list)
-  #print(up2bit_value)
-  up2bit_value = sum(hexal_digit*(6**pos) for pos, hexal_digit in enumerate(reversed(hexal_digits)))
-  test = list(hexal_digit*(6**pos) for pos, hexal_digit in enumerate(reversed(hexal_digits)))
-  print(test)
-  print(hexal_digits)
-  print(up2bit_value)
+
+  up2bit_value = sum(hexal_digit*(6**pos) for pos, hexal_digit in enumerate(hexal_digits))
+  print("hexal digit blocks: " + 
+        ", ".join(str_digits(hexal_digit_block) for hexal_digit_block in hexal_digit_blocks))
+  print(f"hexal digits: {str_digits(hexal_digits)}")
+
 else:
   binary_blocksize = math.floor(math.log(len(wordlist), 2)) 
   up2bit_value = sum(value<<binary_blocksize*chunk for chunk, value in enumerate(values))
-  print(up2bit_value)
-  print("{0:50b}".format(up2bit_value))
-  #total_bits = math.ceil(math.log(up2bit_value, 2)) 
-  #chunks = math.ceil(total_bits/binary_blocksize)
-  #mask = sum(1<<pos for pos in range(0, binary_blocksize))
-  
-   # binary
-bits = 0
-count_bits = up2bit_value
-while count_bits!=0:
-  count_bits=count_bits>>1
-  bits+=1
-total_bits = len(bin(up2bit_value))
-print(bin(up2bit_value))
-print(bits,total_bits, up2bit_value.bit_length())
-up2bit_decode(up2bit_value)
+
+print(f"decoded up2bit value: {up2bit_value}, 0b{up2bit_value:b}")
+dna_sequence = up2bit_decode(up2bit_value)
+print(f"DNA sequence {dna_sequence}")
