@@ -104,26 +104,6 @@ def up2bit_decode(up2bit_value):
     return "".join(result)
 
 """
-Determines if `number` starts with a '1' digit in the chosen `base`. A `True`
-return value might indicate, for example, that the integers from 0 to `number-1`
-(inclusive) would fully fit in certain number of digits of that base. 
-
-For example `is_full_base_x(10000,10)` returns `True` as numbers [0-9999] fit
-in the full range of 4 decimal digits. `is_full_base_x(2048,2)` returns `True` 
-as numbers [0-2047] fit in the full range of 11 binary digits.
-
-Args:
-    number: The number to test.
-    base: The base to use for the test.
-
-Returns:
-    `True` if the first digit for `number` in `base` is `1`.
-
-"""
-def is_full_base_x(number, base):
-  return math.modf(math.log(number, base))[0]==0
-
-"""
 Decode dice `123456`-style base6 numbers (e.g. `111111 = 0`, `111112 = 1`).
 
 Args:
@@ -185,6 +165,26 @@ def read_wordlist(filename):
   return wordlist
 
 """
+Determines if `number` starts with a '1' digit in the chosen `base`. A `True`
+return value might indicate, for example, that the integers from 0 to `number-1`
+(inclusive) would fully fit in certain number of digits of that base. 
+
+For example `is_full_base_x(10000,10)` returns `True` as numbers [0-9999] fit
+in the full range of 4 decimal digits. `is_full_base_x(2048,2)` returns `True` 
+as numbers [0-2047] fit in the full range of 11 binary digits.
+
+Args:
+    number: The number to test.
+    base: The base to use for the test.
+
+Returns:
+    `True` if the first digit for `number` in `base` is `1`.
+
+"""
+def is_full_base_x(number, base):
+  return math.modf(math.log(number, base))[0]==0
+
+"""
 Converts a number to a list of digits in given base, with least signficiant
 bits first e.g. 13 in base 2 to `[1, 0, 1, 1]`.
 
@@ -203,113 +203,154 @@ def convert_base_x(num, base):
         result.append(digit)
     return result
 
-bip39_english = read_wordlist("../wordlist/bip39_english.txt")
-eff_large_wordlist = read_wordlist("../wordlist/eff_large_wordlist.txt")
-eff_short_wordlist1 = read_wordlist("../wordlist/eff_short_wordlist_1.txt")
-eff_short_wordlist2 = read_wordlist("../wordlist/eff_short_wordlist_2_0.txt")
+"""
+Format a list of digits in least to most significant digit order to
+a string with most significant bits to the left e.g. `[2, 1, 0, 3]` to `3012`.
+Meant for formatting lists of numbers in an base. 
+Will use 0-9, A-Z, and ascending characters from Z in ASCII table, 
+i.e. no checks for overflow performed. 
 
+Args:
+  digits: List of digits. Digits up to 35 supported as `0-9,A-Z`
 
-test_sequence = "AAGCCACACAGACTATTGTG"
-#test_sequence = "AAGCCACACAGACTATTGTA"
-test_sequence = "TAGCCACACAGACTATTGTG" # orig
-up2bit_value = up2bit(test_sequence)
-print(f"{test_sequence}")
-print(f"up2bit: {up2bit_value}, 0b{up2bit_value:b}")
+Returns:
+  Number formatted as string reading from right to left, most to least 
+  significant digits.
 
-#wordlist = bip39_english
-#wordlist = eff_large_wordlist
-wordlist = eff_short_wordlist1
-
-# encode
-
-# Note, in up2bit encoding, left-most bases (i.e. those read first) become
-# the least significant bits (i.e. numbers should be read from least to
-# more significant bits, or right-to-left).
-#
-# Corresponding conversations will take chunks of bits from least-significant
-# to most significant (i.e. chunking is right-to-left), so first chunk 
-# will be left-most bases in original DNA sequence.
-mnemonic = []
-is_hexal = is_full_base_x(len(wordlist),6) # True if wordlist uses base6 indexes
-if is_hexal:
-  # encode as base6/hexal (using Diceware style wordlist)
-  hexal_blocksize = math.floor(math.log(len(wordlist), 6)) 
-    # number of hexal digits used to index each word in wordlist
-  
-  as_hexal = convert_base_x(up2bit_value, 6)
-    # note: this returns a list with least significant bits first
-    # we keep this as-is when processing, but reverse order of digits when printing
-  str_digits = lambda digits: ''.join(str(digit) for digit in list(reversed(digits)))
+"""
+def str_digits(digits):
+  get_char = lambda digit: str(digit) if digit<10 else chr(digit-10+ord("A")) 
+  return ''.join(get_char(digit) for digit in list(reversed(digits)))
     # helper for printing list of digits with least-significant first as 
     # string with most significant to the left
 
-  padding = [0]*((hexal_blocksize - len(as_hexal)%hexal_blocksize) % hexal_blocksize)
-  as_hexal = as_hexal + padding
-    # append zeroes if needed
 
-  print(f"wordlist hexal blocksize: {hexal_blocksize}\nhexal digits: {str_digits(as_hexal)}")
+def encode_sequence(dna_sequence, wordlist, verbose = False):
+  up2bit_value = up2bit(dna_sequence)
+  if verbose: print(f"DNA sequence to encode: {dna_sequence}")
+  if verbose: print(f"up2bit: {up2bit_value}, 0b{up2bit_value:b}")
+
+  # Encode DNA sequence as mnenomic via up2bit conversion
+
+  # Note, in up2bit encoding, left-most bases (i.e. those read first) become
+  # the least significant bits (i.e. numbers should be read from least to
+  # more significant bits, or right-to-left).
+  #
+  # Corresponding conversations will take chunks of bits from least-significant
+  # to most significant (i.e. chunking is right-to-left), so first chunk 
+  # will be left-most bases in original DNA sequence.
+  mnemonic = []
+  is_hexal = is_full_base_x(len(wordlist),6) # True if wordlist uses base6 indexes
+  if is_hexal:
+    # encode as base6/hexal (using Diceware style wordlist)
+    hexal_blocksize = math.floor(math.log(len(wordlist), 6)) 
+      # number of hexal digits used to index each word in wordlist
+    
+    as_hexal = convert_base_x(up2bit_value, 6)
+      # note: this returns a list with least significant bits first
+      # we keep this as-is when processing, but reverse order of digits when printing
+
+    while len(as_hexal)%hexal_blocksize!=0:
+      as_hexal.append(0)
+      # append zeroes if needed
+
+    if verbose: print(f"wordlist hexal blocksize: {hexal_blocksize}\nhexal digits: {str_digits(as_hexal)}")
+    
+    hexal_blocks = (as_hexal[x:x+hexal_blocksize] for x in range(0, len(as_hexal), hexal_blocksize))
+
+    for hexal_block in hexal_blocks:
+      index = sum(digit*(6**pos) for pos, digit in enumerate(hexal_block))
+      word = wordlist[index]
+      mnemonic.append(word.title())
+      if verbose: 
+        print(f" digits {str_digits(hexal_block)},"
+              f" dice {str_digits(list(digit+1 for digit in hexal_block))},"
+              f" index: {index}, word: {word}")
+
+  else:
+    # encode as binary (using bip39 style wordlist)
+    binary_blocksize = math.floor(math.log(len(wordlist), 2)) 
+
+    mask = sum(1<<pos for pos in range(0, binary_blocksize))
+    if verbose: print(f"wordlist binary blocksize: {binary_blocksize}")
+
+    # cut off chunks of bits using a bit shift
+    remaining_bits = up2bit_value
+    while remaining_bits!=0:
+      this_block = remaining_bits&mask
+      remaining_bits=remaining_bits>>binary_blocksize
+      word = wordlist[this_block]
+      mnemonic.append(word.title())
+      if verbose: print(f" digits {this_block:0{binary_blocksize}b}, index: {this_block}, word: {word}")
   
-  hexal_blocks = (as_hexal[x:x+hexal_blocksize] for x in range(0, len(as_hexal), hexal_blocksize))
+  return mnemonic
 
-  for hexal_block in hexal_blocks:
-    index = sum(digit*(6**pos) for pos, digit in enumerate(hexal_block))
-    word = wordlist[index]
-    mnemonic.append(word.title())
-    print(f" digits {str_digits(hexal_block)},"
-          f" dice {str_digits(list(digit+1 for digit in hexal_block))},"
-          f" index: {index}, word: {word}")
+def decode_mnemonic(mnemonic, wordlist, verbose = False):
+  # Decode a mnemonic DNA sequence encoded with up2bit encoding+wordlist 
+  # back to sequence
 
-else:
-  # encode as binary (using bip39 style wordlist)
-  binary_blocksize = math.floor(math.log(len(wordlist), 2)) 
+  inverse_wordlist = {word : value for value, word in enumerate(wordlist)}
+  # Convert wordlist to dict for reverse lookup
 
-  mask = sum(1<<pos for pos in range(0, binary_blocksize))
-  print(f"wordlist binary blocksize: {binary_blocksize}")
+  mnemonic = list(word.lower() for word in mnemonic)
 
-  # cut off chunks of bits using a bit shift
-  remaining_bits = up2bit_value
-  while remaining_bits!=0:
-    this_block = remaining_bits&mask
-    remaining_bits=remaining_bits>>binary_blocksize
-    word = wordlist[this_block]
-    mnemonic.append(word.title())
-    print(f" digits {this_block:0{binary_blocksize}b}, index: {this_block}, word: {word}")
+  for word in mnemonic:
+    if word not in inverse_wordlist: raise Exception(f"Word {word} not in wordlist.")
 
-print(mnemonic)
+  values = [inverse_wordlist[word] for word in mnemonic]
+  # This is list of decoded values, note that the first values correspond to the
+  # least significant digits of the corresponding up2bit encoded int (in turn 
+  # these correspond to the left-most bases in the sequence).
 
-up2bit_value = 0
+  if verbose: 
+    print(f"mnemonic to decode: {mnemonic}")
+    print(f"decoded values: {values}")
+  is_hexal = is_full_base_x(len(wordlist),6) # True if wordlist uses base6 indexes
 
-# decode
-#mnemonic = ["Bus", "Duty", "Session", "Comic"]
-inverse_wordlist = {word : value for value, word in enumerate(wordlist)}
-values = [inverse_wordlist[word.lower()] for word in mnemonic]
-# This is list of decoded values, note that the first values correspond to the
-# least significant digits of the corresponding up2bit encoded int (in turn 
-# these correspond to the left-most bases in the sequence).
+  if is_hexal:
+    hexal_blocksize = math.floor(math.log(len(wordlist), 6)) 
+    hexal_digit_blocks = [convert_base_x(value, 6) for value in values]
+      # convert each word into a series of hexal digits
+    
+    hexal_digit_blocks = list( hexal_digit_block + [0]*(hexal_blocksize-len(hexal_digit_block)) for
+      hexal_digit_block in hexal_digit_blocks)
+      # pad with zeroes to the right as needed, e.g. [2, 2] to [2, 2, 0, 0]
+    hexal_digits = list(itertools.chain(*hexal_digit_blocks))  
+      # flatten into a list of hexal digits
 
-print(f"decoded values: {values}")
-is_hexal = is_full_base_x(len(wordlist),6) # True if wordlist uses base6 indexes
+    up2bit_value = sum(hexal_digit*(6**pos) for pos, hexal_digit in enumerate(hexal_digits))
+    if verbose:
+      print("hexal digit blocks: " + 
+          ", ".join(str_digits(hexal_digit_block) for hexal_digit_block in hexal_digit_blocks))
+      print(f"hexal digits: {str_digits(hexal_digits)}")
 
-if is_hexal:
-  hexal_blocksize = math.floor(math.log(len(wordlist), 6)) 
-  hexal_digit_blocks = [convert_base_x(value, 6) for value in values]
-    # convert each word into a series of hexal digits
-  
-  hexal_digit_blocks = list( hexal_digit_block + [0]*(hexal_blocksize-len(hexal_digit_block)) for
-    hexal_digit_block in hexal_digit_blocks)
-    # pad with zeroes to the right as needed, e.g. [2, 2] to [2, 2, 0, 0]
-  hexal_digits = list(itertools.chain(*hexal_digit_blocks))  
-    # flatten into a list of hexal digits
+  else:
+    binary_blocksize = math.floor(math.log(len(wordlist), 2)) 
+    up2bit_value = sum(value<<binary_blocksize*chunk for chunk, value in enumerate(values))
+  if verbose: print(f"decoded up2bit value: {up2bit_value}, 0b{up2bit_value:b}")
+  dna_sequence = up2bit_decode(up2bit_value)
+  if verbose: print(f"DNA sequence {dna_sequence}")
+  return dna_sequence
 
-  up2bit_value = sum(hexal_digit*(6**pos) for pos, hexal_digit in enumerate(hexal_digits))
-  print("hexal digit blocks: " + 
-        ", ".join(str_digits(hexal_digit_block) for hexal_digit_block in hexal_digit_blocks))
-  print(f"hexal digits: {str_digits(hexal_digits)}")
 
-else:
-  binary_blocksize = math.floor(math.log(len(wordlist), 2)) 
-  up2bit_value = sum(value<<binary_blocksize*chunk for chunk, value in enumerate(values))
+if __name__ == "__main__":
+  test_sequences = ["TAGCCACACAGACTATTGTG",
+                    "AAGCCACACAGACTATTGTG",
+                    "TAGCCACACAGACTATTGTA"]
+  #bip39_english = read_wordlist("../wordlist/bip39_english.txt")
+  #eff_large_wordlist = read_wordlist("../wordlist/eff_large_wordlist.txt")
+  #eff_short_wordlist1 = read_wordlist("../wordlist/eff_short_wordlist_1.txt")
+  #eff_short_wordlist2 = read_wordlist("../wordlist/eff_short_wordlist_2_0.txt")
 
-print(f"decoded up2bit value: {up2bit_value}, 0b{up2bit_value:b}")
-dna_sequence = up2bit_decode(up2bit_value)
-print(f"DNA sequence {dna_sequence}")
+  wordlists = ["bip39_english.txt", "eff_large_wordlist.txt",
+              "eff_short_wordlist_1.txt", "eff_short_wordlist_2_0.txt"]
+  verbose = False
+  for wordlist_name in wordlists:
+    wordlist = read_wordlist("../wordlist/"+wordlist_name)
+    print(wordlist_name)
+    for dna_sequence in test_sequences:
+      mnemonic = encode_sequence(dna_sequence, wordlist, verbose)
+      decoded = decode_mnemonic(mnemonic, wordlist, verbose)
+      print("".join(mnemonic))
+      print(decoded)
+    print()
